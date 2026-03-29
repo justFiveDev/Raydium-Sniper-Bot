@@ -5,6 +5,9 @@ A **Raydium sniper bot** for **Solana** that listens for **new Raydium CPMM pool
 If you are searching for a **Raydium sniper bot**, **Solana sniper bot**, **CPMM sniper**, or **gRPC sniper bot**, this project targets **Raydium CPMM** pool creation events, not Raydium CLMM or general mempool bots.
 
 ---
+<img width="762" height="833" alt="Screenshot_1" src="https://github.com/user-attachments/assets/6ed392b0-7659-43f2-a2a4-7267069e6c0c" />
+
+
 
 ## Topics (GitHub / search)
 
