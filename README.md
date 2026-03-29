@@ -1,132 +1,170 @@
-# Raydium CPMM Sniper Bot — gRPC Sniper Bot for Solana
+# Raydium Sniper Bot — CPMM New-Pool Sniper (Solana)
 
-A **Raydium sniper bot** that uses **gRPC** (Yellowstone) to detect new **CPMM** pools on Raydium and execute buys at pool creation. Built for Solana with a **web UI** (Express). Suitable for **CPMM sniper** workflows.
+A **Raydium sniper bot** for **Solana** that listens for **new Raydium CPMM pools** over **Yellowstone gRPC**, then submits a **WSOL → token swap** after pool open time. This repo is a **Raydium sniper bot** with a **web dashboard** (Express), **session-based wallet generation**, and **live sniping logs** in the UI.
+
+If you are searching for a **Raydium sniper bot**, **Solana sniper bot**, **CPMM sniper**, or **gRPC sniper bot**, this project targets **Raydium CPMM** pool creation events, not Raydium CLMM or general mempool bots.
 
 ---
 
-### Repo description (for GitHub/GitLab “About”)
+## Topics (GitHub / search)
 
-**Short (recommended):**  
-Raydium CPMM sniper bot using Yellowstone gRPC for low-latency new-pool detection on Solana. Web UI (Express), cookie sessions. Raydium sniper · CPMM · gRPC sniper.
-
-**Shorter (~120 chars):**  
-Raydium CPMM sniper — Yellowstone gRPC new-pool detection, Express web UI, Solana.
-
-**Categories / Topics:**  
-`raydium` `sniper-bot` `cpmm` `grpc` `solana` `yellowstone-grpc` `express` `raydium-cpmm` `typescript`
+`raydium-sniper-bot` · `raydium sniper bot` · `solana sniper bot` · `raydium cpmm` · `cpmm sniper` · `yellowstone-grpc` · `grpc sniper` · `solana` · `raydium` · `express` · `typescript`
 
 ---
 
 ## Features
 
-- **gRPC** — Subscribes to Solana via [Yellowstone gRPC](https://github.com/rpcpool/yellowstone-grpc) for low-latency new-pool detection (no polling).
-- **Raydium CPMM** — Listens for CPMM `initialize`-style transactions and snipes the new pool’s token (WSOL → mint).
-- **Web UI** — Generate a new wallet in-session, **fund it by depositing SOL to its public address**, then enter mint and SOL size and start sniping; balances and status via the API.
+- **Raydium sniper bot** flow: gRPC stream → decode CPMM `initialize` → wait for `open_time` → build swap → send via RPC.
+- **Low-latency detection** using [Yellowstone gRPC](https://github.com/rpcpool/yellowstone-grpc) (e.g. Triton `@triton-one/yellowstone-grpc`).
+- **Web UI**: generate a wallet, fund by **SOL deposit** to the public address, set mint + size, start snipe, view **sniping log** lines.
+- **Optional dev samples**: set `ENABLE_SAMPLE_SNIPER_LOGS=1` to load demo log lines in the UI.
 
 ---
 
-## Project Architecture
+## Project architecture
 
 ```
-Browser  →  Express (static + JSON API + express-session)
-                ↓
-         sniper/cpmm_new_pool  →  Yellowstone gRPC + Solana RPC
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        Raydium Sniper Bot (this repo)                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   Browser                                                                 │
+│      │                                                                    │
+│      ▼                                                                    │
+│   ┌──────────────────────┐     ┌─────────────────────────────────────┐  │
+│   │  Express (`server`)   │     │  `public/` — HTML / CSS / JS         │  │
+│   │  • express-session    │     │  Wallet, snipe form, log panel       │  │
+│   │  • REST: /api/*       │     └─────────────────────────────────────┘  │
+│   └──────────┬───────────┘                                              │
+│              │                                                            │
+│              │  starts `streamRaydiumNewTokens` (background job)          │
+│              ▼                                                            │
+│   ┌──────────────────────────────────────────────────────────────────┐   │
+│   │  `src/sniper/cpmm_new_pool/`                                      │   │
+│   │  • Yellowstone client — subscribe txs touching CPMM program id   │   │
+│   │  • Parse tx (IDL + shyft parser) → pool mints, state, open_time    │   │
+│   │  • `wrapping` — SOL / WSOL prep                                  │   │
+│   │  • `cpmm` — Anchor swap ix                                       │   │
+│   │  • `ixsExecutor` — versioned tx + CU + retries                     │   │
+│   └──────────────┬───────────────────────────────┬───────────────────┘   │
+│                  │                               │                        │
+│                  ▼                               ▼                        │
+│         Yellowstone gRPC                   Solana JSON-RPC                 │
+│         (stream transactions)              (send + confirm)               │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-| Layer | Path | Role |
-|-------|------|------|
-| **Entry** | `src/server.ts` | HTTP server, sessions, `/api/*`, serves `public/` |
-| **UI** | `public/` | HTML/CSS/JS console |
-| **Validation** | `src/web/validation.ts` | Mint / PK / amount checks |
-| **Sniper** | `src/sniper/cpmm_new_pool/` | gRPC subscribe → parse pool → wrap → swap |
-| **Config** | `src/config/index.ts` | `PORT`, `SESSION_SECRET`, `RPC_ENDPOINT`, `GRPC_ENDPOINT`, `xToken` |
+### Main paths
 
-### Sniper flow (CPMM new pool)
-
-1. User generates a wallet in the web UI (secret key shown once, then stored in **server-side session** only). User sends **native SOL** to the generated public address to fund snipes.
-2. User submits token mint and SOL amount; server starts `streamRaydiumNewTokens` in the background.
-3. **Yellowstone gRPC** streams transactions for the Raydium CPMM program id.
-4. Pool info is decoded from `initialize`; after open time, a CPMM swap tx is built and sent via RPC.
+| Area | Path | Role |
+|------|------|------|
+| HTTP entry | `src/server.ts` | Express app, static files, session, sniper + wallet APIs |
+| Config | `src/config/index.ts` | `PORT`, `SESSION_SECRET`, `RPC_ENDPOINT`, `GRPC_ENDPOINT`, `xToken`, flags |
+| Sniper core | `src/sniper/cpmm_new_pool/index.ts` | gRPC subscribe loop, pool detection, swap trigger |
+| Swap + wrap | `src/sniper/cpmm_new_pool/swap/` | CPMM swap ix, SOL ↔ WSOL setup |
+| UI log buffer | `src/web/sniperLogBuffer.ts` | Per-session lines for `/api/sniper/logs` |
+| Validation | `src/web/validation.ts` | Mint / amount checks |
+| Frontend | `public/` | Single-page console |
 
 ---
 
 ## Prerequisites
 
-- **Node.js** (v18+)
-- **Solana RPC** endpoint (e.g. Helius, QuickNode, public RPC)
-- **Yellowstone gRPC** endpoint and `xToken` (e.g. [Triton](https://github.com/rpcpool/yellowstone-grpc) or similar)
+- **Node.js** 25+
+- **Solana RPC** URL (mainnet or cluster you intend to use)
+- **Yellowstone gRPC** endpoint + **xToken** (from your provider)
 
 ---
 
-## How to Run
+## How to run this project
 
-### 1. Clone and install
+### 1. Clone and install dependencies
 
 ```bash
-git clone <your-repo-url>
-cd gRPC-Raydium-Sniper-Bot
-npm install
+git clone https://github.com/justFiveDev/Raydium-Sniper-Bot.git
+cd Raydium-Sniper-Bot
+yarn
 ```
 
 ### 2. Environment variables
 
-Create a `.env` in the project root (see `.gitignore`; never commit secrets):
-
-```env
-# Server
-PORT=3000
-SESSION_SECRET=use-a-long-random-string-in-production
-
-# Optional: show “Load sample log lines” in the UI and POST /api/sniper/logs/sample (dev only)
-# ENABLE_SAMPLE_SNIPER_LOGS=1
-
-# Solana
-RPC_ENDPOINT=https://api.mainnet-beta.solana.com
-GRPC_ENDPOINT=your_yellowstone_grpc_endpoint
-xToken=your_yellowstone_grpc_x_token
-```
-
-Use strong `SESSION_SECRET` and HTTPS in production; treat the machine as trusted for wallet keys held in session.
-
-### 3. Build and start
+Copy the sample file and edit values:
 
 ```bash
-npm run build
-npm start
+cp .env.sample .env
 ```
 
-Open **http://localhost:3000** (or your `PORT`).
+Required for real sniping:
 
-Development with reload:
+- `SESSION_SECRET` — long random string (production: use a strong secret).
+- `GRPC_ENDPOINT` — your Yellowstone gRPC URL.
+- `xToken` — auth token from the gRPC provider.
+
+Recommended:
+
+- `RPC_ENDPOINT` — reliable Solana HTTP RPC (Helius, QuickNode, etc.).
+
+See **`.env.sample`** for all variables and comments.
+
+### 3. Build TypeScript
 
 ```bash
-npm run dev
+yarn run build
 ```
+
+This compiles `src/` into `dist/` (see `tsconfig.json`).
+
+### 4. Start the server
+
+```bash
+yarn start
+```
+
+By default the app listens on **`PORT`** from `.env` (see `.env.sample`; default in code may be **5000**). Open:
+
+`http://localhost:<PORT>`
+
+### 5. Development (auto-restart on file changes)
+
+```bash
+yarn run dev
+```
+
+Uses **nodemon** + **ts-node** on `src/server.ts` (no separate build step while developing).
+
+### 6. Use the Raydium sniper bot in the browser
+
+1. **Generate wallet & connect** — save the secret key when shown; fund the **public address** with SOL.
+2. Enter **token mint** and **SOL amount**, then **Start sniping**.
+3. Watch **Sniping log** for stream / wrap / swap messages.
 
 ---
 
 ## Scripts
 
-| Script | Description |
-|--------|-------------|
-| `npm run build` | Compile TypeScript to `dist/` |
-| `npm start` | Run `node dist/server.js` |
-| `npm run dev` | Run with nodemon + ts-node |
+| Command | Description |
+|---------|-------------|
+| `yarn run build` | Compile TypeScript → `dist/` |
+| `yarn start` | Run production server: `node dist/server.js` |
+| `yarn run dev` | Dev server with reload: `nodemon` + `ts-node` |
 
 ---
 
-## Author
+## Security notes
 
-- **Telegram:** [@microRustyme](https://t.me/microRustyme)
+- Wallet keys live in **server-side sessions**; run behind **HTTPS** in production and lock down the host.
+- Use a **dedicated** wallet and only the SOL you are willing to risk.
+- Keep **`.env`** out of version control.
 
 ---
 
 ## Disclaimer
 
-This is experimental software for educational purposes. Use at your own risk. Sniping involves financial risk and reliance on third-party RPC/gRPC; the author is not responsible for any losses. Always verify contracts and endpoints yourself.
+Educational / experimental software. **Raydium sniper bot** trading is high risk. You are responsible for RPC/gRPC providers, keys, and on-chain outcomes. Not financial advice.
 
 ---
 
-## Keywords (for search)
+## Author
 
-Raydium sniper bot · CPMM sniper · gRPC sniper · Solana sniper · Yellowstone gRPC · Raydium CPMM
+- Telegram: [@microRustyme](https://t.me/microRustyme)
