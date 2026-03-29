@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Raydium CPMM Sniper</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <header class="header">
+        <h1>Raydium CPMM Sniper</h1>
+        <p class="sub">
+          Yellowstone gRPC new-pool detection · Web console
+        </p>
+      </header>
+
+      <main class="panels">
+        <section class="card" id="wallet-panel">
+          <h2>Wallet</h2>
+          <div id="wallet-intro">
+            <p class="requirement">
+              <strong>Funding:</strong> generate a new wallet here, then
+              <strong>send SOL to its public address</strong> from any exchange
+              or wallet (native SOL deposit). The sniper spends that balance
+              and wraps to WSOL when needed. Keys are not imported from
+              elsewhere.
+            </p>
+            <button type="button" id="btn-generate">
+              Generate wallet &amp; connect
+            </button>
+          </div>
+          <div id="generate-secrets" class="secrets hidden">
+            <p class="label">Save your secret key (shown only until you dismiss)</p>
+            <p class="mono small secret-pk" id="secret-key-display"></p>
+            <p class="label">Deposit address — send SOL here to fund</p>
+            <div class="copy-row">
+              <p class="mono pubkey inline-pk" id="deposit-address-display"></p>
+              <button type="button" id="btn-copy-address" class="secondary small-btn">
+                Copy address
+              </button>
+            </div>
+            <button type="button" id="btn-secrets-done" class="secondary">
+              I've saved my secret key
+            </button>
+          </div>
+          <div id="wallet-connected" class="hidden">
+            <p class="label">Funded wallet (deposit target)</p>
+            <div class="copy-row">
+              <p class="mono pubkey inline-pk" id="pubkey-display"></p>
+              <button type="button" id="btn-copy-pubkey" class="secondary small-btn">
+                Copy
+              </button>
+            </div>
+            <p class="hint small">
+              Add SOL by transferring to this address. Native SOL is used;
+              wrapping runs automatically when you snipe.
+            </p>
+            <p class="label">Balances (SOL)</p>
+            <p class="mono balance-line" id="balance-display">—</p>
+            <div class="row">
+              <button type="button" id="btn-refresh-balance" class="secondary">
+                Refresh balance
+              </button>
+              <button type="button" id="btn-disconnect" class="danger">
+                Disconnect
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card" id="sniper-panel">
+          <h2>Snipe</h2>
+          <p class="hint">
+            Listens for new Raydium CPMM pools and swaps WSOL → token when a
+            pool opens. Ensure <code>GRPC_ENDPOINT</code> and RPC are set.
+          </p>
+          <label class="label" for="mint-input">Token mint to buy</label>
+          <input
+            id="mint-input"
+            type="text"
+            placeholder="SPL mint address"
+            spellcheck="false"
+            autocomplete="off"
+          />
+          <label class="label" for="amount-input">Amount (SOL)</label>
+          <input
+            id="amount-input"
+            type="text"
+            inputmode="decimal"
+            placeholder="e.g. 0.05"
+          />
+          <button type="button" id="btn-start" disabled>Start sniping</button>
+          <p id="status-line" class="status"></p>
+          <p id="result-line" class="result mono small"></p>
+          <div class="log-section">
+            <p class="label">Sniping log</p>
+            <div id="sample-logs-row" class="sample-logs-row hidden">
+              <button type="button" id="btn-sample-logs" class="secondary small-btn">
+                Load sample log lines (UI test)
+              </button>
+              <span class="hint small inline-hint">
+                Requires <code>ENABLE_SAMPLE_SNIPER_LOGS=1</code> on the server.
+              </span>
+            </div>
+            <div id="sniper-log-output" class="log-output mono" aria-live="polite"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>
