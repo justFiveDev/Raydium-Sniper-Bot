@@ -170,4 +170,4 @@ Educational / experimental software. **Raydium sniper bot** trading is high risk
 
 ## Author
 
-- Telegram: [@microRustyme](https://t.me/microRustyme)
+[Telegram](https://t.me/fiv3dev)
